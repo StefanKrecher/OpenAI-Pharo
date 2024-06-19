@@ -20,21 +20,23 @@ Examples:
 [This comment was automatically created with https://github.com/brackendev/OpenAI-Pharo]
 "
 Class {
-	#name : #OpenAISDK,
-	#superclass : #Object,
+	#name : 'OpenAISDK',
+	#superclass : 'Object',
 	#instVars : [
 		'client'
 	],
-	#category : #'OpenAI-Core'
+	#category : 'OpenAI-Core',
+	#package : 'OpenAI',
+	#tag : 'Core'
 }
 
-{ #category : #public }
+{ #category : 'public' }
 OpenAISDK class >> createWithAPIKey: anAPIKeyString [
 
 	^ self createWithAPIKey: anAPIKeyString organization: nil
 ]
 
-{ #category : #public }
+{ #category : 'public' }
 OpenAISDK class >> createWithAPIKey: anAPIKeyString organization: anOrganizationString [
 
 	"Get an API key at https://platform.openai.com/account/api-keys"
@@ -51,30 +53,56 @@ OpenAISDK class >> createWithAPIKey: anAPIKeyString organization: anOrganization
 	^ self new client: client
 ]
 
-{ #category : #public }
+{ #category : 'public' }
 OpenAISDK class >> openUsagePage [
 
 	WebBrowser openOn: 'https://platform.openai.com/account/usage'
 ]
 
-{ #category : #private }
+{ #category : 'private' }
 OpenAISDK >> baseURL [ 
 ^ 'https://api.openai.com/v1'
 ]
 
-{ #category : #accessing }
+{ #category : 'accessing' }
 OpenAISDK >> client [
 
 	^ client
 ]
 
-{ #category : #accessing }
+{ #category : 'accessing' }
 OpenAISDK >> client: anObject [
 
 	client := anObject
 ]
 
-{ #category : #public }
+{ #category : 'public' }
+OpenAISDK >> createAudioWithInput: anInputString model: aModelString voice: aVoiceString [
+
+	| dict theClient json response decoded |
+	dict := {
+		        ('input'
+		         -> anInputString ).
+		        ('model' -> aModelString).
+"				('response_format' -> 'wav')."
+		        ('voice' -> aVoiceString ) } asDictionary.
+	json := NeoJSONWriter toString: dict.
+
+	theClient := self client.
+	theClient
+		entity: (ZnEntity with: json type: ZnMimeType applicationJson);
+		url: self baseURL , '/audio/speech'.
+
+	response := theClient post.
+^response
+	"decoded := NeoJSONReader fromString: response.
+	(decoded includesKey: 'error') ifTrue: [
+		OpenAISDKException signalForObject: decoded ].
+
+	^ OpenAISDKChatCompletion createWithAPIResponse: decoded"
+]
+
+{ #category : 'public' }
 OpenAISDK >> createChatCompletionWithMessages: aChatObjectsArray model: aModelString temperature: aTemperatureFloat [
 
 	| dict theClient json response decoded |
@@ -99,13 +127,13 @@ OpenAISDK >> createChatCompletionWithMessages: aChatObjectsArray model: aModelSt
 	^ OpenAISDKChatCompletion createWithAPIResponse: decoded
 ]
 
-{ #category : #public }
+{ #category : 'public' }
 OpenAISDK >> createImageWithPrompt: aPromptString [
 
 	^ self createImageWithPrompt: aPromptString number: 1 size: '1024x1024'
 ]
 
-{ #category : #public }
+{ #category : 'public' }
 OpenAISDK >> createImageWithPrompt: aPromptString number: aNumberString size: aSizeString [
 	"https://platform.openai.com/docs/api-reference/images/create"
 
@@ -130,7 +158,7 @@ OpenAISDK >> createImageWithPrompt: aPromptString number: aNumberString size: aS
 	^ OpenAISDKImage createWithAPIResponse: decoded
 ]
 
-{ #category : #public }
+{ #category : 'public' }
 OpenAISDK >> listModels [
 	"https://platform.openai.com/docs/api-reference/models/list"
 
@@ -147,7 +175,7 @@ OpenAISDK >> listModels [
 	^ OpenAISDKModels createWithAPIResponse: decoded
 ]
 
-{ #category : #public }
+{ #category : 'public' }
 OpenAISDK >> retrieveModel: aModelString [
 	"https://platform.openai.com/docs/api-reference/models/retrieve"
 
