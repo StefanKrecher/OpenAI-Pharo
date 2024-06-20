@@ -159,6 +159,33 @@ OpenAISDK >> createImageWithPrompt: aPromptString number: aNumberString size: aS
 ]
 
 { #category : 'public' }
+OpenAISDK >> createTranscriptFromBinary: byteArray model: aModelString [
+
+	| dict theClient json response znMulti |
+	dict := {
+		        ('file' -> byteArray).
+		        ('model' -> aModelString) } asDictionary.
+	json := NeoJSONWriter toString: dict.
+
+	znMulti := ZnMultiPartFormDataEntity new.
+	znMulti addPart: (ZnMimePart fieldName: 'model' value: aModelString).
+	znMulti addPart: (ZnMimePart fieldName: 'file' fileName:'afile.wav' entity: (ZnByteArrayEntity bytes: byteArray) ).
+
+	theClient := self client.
+	theClient
+		entity: znMulti ;
+		url: self baseURL , '/audio/transcriptions'.
+
+	response := theClient post.
+	^ response
+	"decoded := NeoJSONReader fromString: response.
+	(decoded includesKey: 'error') ifTrue: [
+		OpenAISDKException signalForObject: decoded ].
+
+	^ OpenAISDKChatCompletion createWithAPIResponse: decoded"
+]
+
+{ #category : 'public' }
 OpenAISDK >> listModels [
 	"https://platform.openai.com/docs/api-reference/models/list"
 
