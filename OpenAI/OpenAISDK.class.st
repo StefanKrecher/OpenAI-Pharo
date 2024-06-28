@@ -79,12 +79,11 @@ OpenAISDK >> client: anObject [
 { #category : 'public' }
 OpenAISDK >> createAudioWithInput: anInputString model: aModelString voice: aVoiceString [
 
-	| dict theClient json response decoded |
+	| dict theClient json response |
 	dict := {
 		        ('input'
 		         -> anInputString ).
 		        ('model' -> aModelString).
-"				('response_format' -> 'wav')."
 		        ('voice' -> aVoiceString ) } asDictionary.
 	json := NeoJSONWriter toString: dict.
 
@@ -95,11 +94,7 @@ OpenAISDK >> createAudioWithInput: anInputString model: aModelString voice: aVoi
 
 	response := theClient post.
 ^response
-	"decoded := NeoJSONReader fromString: response.
-	(decoded includesKey: 'error') ifTrue: [
-		OpenAISDKException signalForObject: decoded ].
 
-	^ OpenAISDKChatCompletion createWithAPIResponse: decoded"
 ]
 
 { #category : 'public' }
@@ -178,11 +173,7 @@ OpenAISDK >> createTranscriptFromBinary: byteArray model: aModelString [
 
 	response := theClient post.
 	^ response
-	"decoded := NeoJSONReader fromString: response.
-	(decoded includesKey: 'error') ifTrue: [
-		OpenAISDKException signalForObject: decoded ].
 
-	^ OpenAISDKChatCompletion createWithAPIResponse: decoded"
 ]
 
 { #category : 'public' }
