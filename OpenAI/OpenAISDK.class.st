@@ -194,6 +194,34 @@ OpenAISDK >> listModels [
 ]
 
 { #category : 'public' }
+OpenAISDK >> listModelsAsText [
+	"https://platform.openai.com/docs/api-reference/models/list"
+
+	| theClient response decoded |
+	theClient := self client.
+	theClient url: self baseURL , '/models'.
+
+	response := theClient get.
+
+	decoded := NeoJSONReader fromString: response.
+	^(decoded at: #data) collect: [ :entry | entry at: #id ]
+]
+
+{ #category : 'public' }
+OpenAISDK >> listModelsDict [
+	"https://platform.openai.com/docs/api-reference/models/list"
+
+	| theClient response decoded |
+	theClient := self client.
+	theClient url: self baseURL , '/models'.
+
+	response := theClient get.
+
+	decoded := NeoJSONReader fromString: response.
+	^ decoded 
+]
+
+{ #category : 'public' }
 OpenAISDK >> retrieveModel: aModelString [
 	"https://platform.openai.com/docs/api-reference/models/retrieve"
 
