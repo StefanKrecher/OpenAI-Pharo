@@ -109,17 +109,82 @@ OpenAISDK >> createChatCompletionWithMessages: aChatObjectsArray model: aModelSt
 	json := NeoJSONWriter toString: dict.
 
 	theClient := self client.
-	theClient
+	theClient 
 		entity: (ZnEntity with: json type: ZnMimeType applicationJson);
 		url: self baseURL , '/chat/completions'.
 
-	response := theClient post.
+	response := theClient logToTranscript; logLevel: 3;  post.
 
 	decoded := NeoJSONReader fromString: response.
 	(decoded includesKey: 'error') ifTrue: [
 		OpenAISDKException signalForObject: decoded ].
 
 	^ OpenAISDKChatCompletion createWithAPIResponse: decoded
+]
+
+{ #category : 'public' }
+OpenAISDK >> createChatCompletionWithMessagesAsStream: aChatObjectsArray model: aModelString temperature: aTemperatureFloat [
+
+	| myclient apiKey model endpoint headers data stream |
+	"Set up your API key and endpoint"
+	apiKey := PAConfiguration openai_api_key.
+	model := 'gpt-4'.
+	endpoint := 'https://api.openai.com/v1/chat/completions'.
+
+	"Prepare the headers"
+	headers := Dictionary new.
+	headers
+		at: 'Authorization' put: 'Bearer ' , apiKey;
+		at: 'Content-Type' put: 'application/json'.
+
+	"Prepare the data for the request"
+	data := '{"model": "' , model
+	        ,
+	        '", "messages": [{"role": "user", "content": "Hello, who are you?"}], "stream": true}'.
+
+	"Create a new Zinc HTTP client"
+	myclient := ZnClient new.
+	myclient
+		url: endpoint;
+		method: #POST;
+		headerAddAll: headers;
+		streaming: true;
+		"entity: (ZnEntity text: data)."entity:
+			(ZnEntity with: data type: ZnMimeType applicationJson).
+
+	"Send the request and process the streaming response"
+	stream := myclient execute.
+
+	Transcript cr.
+
+	stream
+		ifNotNil: [
+			| firstIteration |
+			firstIteration := true.
+			[ stream atEnd ] whileFalse: [
+				| completionChunkObjectsAsText |
+				firstIteration ifTrue: [ firstIteration := false ] ifFalse: [ stream getNextChunk ].
+				completionChunkObjectsAsText := stream chunk asString lines
+					                                reject: [ :each |
+					                                each isEmpty or: [
+						                                each beginsWith: 'data: [DONE]' ] ].
+				completionChunkObjectsAsText do: [ :o |
+					| content json text |
+					o isEmptyOrNil ifFalse: [
+						content := '' join: {
+								           ${.
+								           (o asString copyAfter: ${) }.
+						[
+						json := NeoJSONReader fromString: content.
+						text := ((json at: #choices) first at: #delta) at: #content.
+						Transcript show: text ]
+							on: Error
+							do: [  ] ] ] ].
+			stream close ]
+		ifNil: [
+			Transcript
+				show: 'Request failed with status ';
+				cr ]
 ]
 
 { #category : 'public' }
