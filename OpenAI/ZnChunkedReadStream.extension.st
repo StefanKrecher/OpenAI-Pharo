@@ -5,3 +5,9 @@ ZnChunkedReadStream >> chunk [
 
 	^ chunk
 ]
+
+{ #category : '*OpenAI' }
+ZnChunkedReadStream >> limit [
+
+	^ limit
+]

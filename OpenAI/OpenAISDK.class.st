@@ -125,10 +125,12 @@ OpenAISDK >> createChatCompletionWithMessages: aChatObjectsArray model: aModelSt
 { #category : 'public' }
 OpenAISDK >> createChatCompletionWithMessagesAsStream: aChatObjectsArray model: aModelString temperature: aTemperatureFloat [
 
-	| myclient apiKey model endpoint headers data stream |
+	| myclient apiKey model endpoint headers data stream listOfChunks chunkObjects |
+	listOfChunks := OrderedCollection new.
+	chunkObjects := OrderedCollection new.
 	"Set up your API key and endpoint"
 	apiKey := PAConfiguration openai_api_key.
-	model := 'gpt-4'.
+	model := 'gpt-3.5-turbo'.
 	endpoint := 'https://api.openai.com/v1/chat/completions'.
 
 	"Prepare the headers"
@@ -140,7 +142,7 @@ OpenAISDK >> createChatCompletionWithMessagesAsStream: aChatObjectsArray model: 
 	"Prepare the data for the request"
 	data := '{"model": "' , model
 	        ,
-	        '", "messages": [{"role": "user", "content": "Hello, who are you?"}], "stream": true}'.
+	        '", "temperature": 1, "messages": [{"role": "user", "content": "Hello, who are you? Tell me more about you and where you come from"}], "stream": true}'.
 
 	"Create a new Zinc HTTP client"
 	myclient := ZnClient new.
@@ -150,7 +152,8 @@ OpenAISDK >> createChatCompletionWithMessagesAsStream: aChatObjectsArray model: 
 		headerAddAll: headers;
 		streaming: true;
 		"entity: (ZnEntity text: data)."entity:
-			(ZnEntity with: data type: ZnMimeType applicationJson).
+			(ZnStringEntity with: data type: ZnMimeType applicationJson).
+	"(ZnEntity with: data type: ZnMimeType applicationJson)."
 
 	"Send the request and process the streaming response"
 	stream := myclient execute.
@@ -159,12 +162,12 @@ OpenAISDK >> createChatCompletionWithMessagesAsStream: aChatObjectsArray model: 
 
 	stream
 		ifNotNil: [
-			| firstIteration |
-			firstIteration := true.
 			[ stream atEnd ] whileFalse: [
-				| completionChunkObjectsAsText |
-				firstIteration ifTrue: [ firstIteration := false ] ifFalse: [ stream getNextChunk ].
-				completionChunkObjectsAsText := stream chunk asString lines
+				| oc completionChunkObjectsAsText |
+				oc := OrderedCollection new: stream limit withAll: nil.
+				stream readInto: oc startingAt: 1 count: stream limit.
+
+				completionChunkObjectsAsText := oc asByteArray asString lines
 					                                reject: [ :each |
 					                                each isEmpty or: [
 						                                each beginsWith: 'data: [DONE]' ] ].
@@ -176,10 +179,13 @@ OpenAISDK >> createChatCompletionWithMessagesAsStream: aChatObjectsArray model: 
 								           (o asString copyAfter: ${) }.
 						[
 						json := NeoJSONReader fromString: content.
-						text := ((json at: #choices) first at: #delta) at: #content.
-						Transcript show: text ]
+						((json at: #choices) first at: #finish_reason) = 'stop'
+							ifFalse: [
+								text := ((json at: #choices) first at: #delta) at: #content.
+								Transcript show: text ] ]
 							on: Error
-							do: [  ] ] ] ].
+							do: [ :ex | Transcript show: ex ] ] ].
+				listOfChunks addAll: completionChunkObjectsAsText ].
 			stream close ]
 		ifNil: [
 			Transcript
