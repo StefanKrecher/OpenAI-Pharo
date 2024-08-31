@@ -123,42 +123,28 @@ OpenAISDK >> createChatCompletionWithMessages: aChatObjectsArray model: aModelSt
 ]
 
 { #category : 'public' }
-OpenAISDK >> createChatCompletionWithMessagesAsStream: aChatObjectsArray model: aModelString temperature: aTemperatureFloat [
+OpenAISDK >> createChatCompletionWithMessagesAsStream: aChatObjectsArray model: aModelString temperature: aTemperatureFloat onStream: aStream [
 
-	| myclient apiKey model endpoint headers data stream listOfChunks chunkObjects |
+	| dict myclient jsonData stream listOfChunks chunkObjects |
+	dict := {
+		        ('messages'
+		         -> (aChatObjectsArray collect: [ :e | e toDictionary ])).
+		        ('model' -> aModelString).
+		        ('temperature' -> aTemperatureFloat).
+		        ('stream' -> 'true') } asDictionary.
+	jsonData := NeoJSONWriter toString: dict.
+
 	listOfChunks := OrderedCollection new.
 	chunkObjects := OrderedCollection new.
-	"Set up your API key and endpoint"
-	apiKey := PAConfiguration openai_api_key.
-	model := 'gpt-3.5-turbo'.
-	endpoint := 'https://api.openai.com/v1/chat/completions'.
 
-	"Prepare the headers"
-	headers := Dictionary new.
-	headers
-		at: 'Authorization' put: 'Bearer ' , apiKey;
-		at: 'Content-Type' put: 'application/json'.
-
-	"Prepare the data for the request"
-	data := '{"model": "' , model
-	        ,
-	        '", "temperature": 1, "messages": [{"role": "user", "content": "Hello, who are you? Tell me more about you and where you come from"}], "stream": true}'.
-
-	"Create a new Zinc HTTP client"
-	myclient := ZnClient new.
+	myclient := self client.
 	myclient
-		url: endpoint;
-		method: #POST;
-		headerAddAll: headers;
-		streaming: true;
-		"entity: (ZnEntity text: data)."entity:
-			(ZnStringEntity with: data type: ZnMimeType applicationJson).
-	"(ZnEntity with: data type: ZnMimeType applicationJson)."
+		url: self baseURL , '/chat/completions';
+		entity: (ZnStringEntity with: jsonData type: ZnMimeType applicationJson).
+
 
 	"Send the request and process the streaming response"
 	stream := myclient execute.
-
-	Transcript cr.
 
 	stream
 		ifNotNil: [
@@ -182,6 +168,7 @@ OpenAISDK >> createChatCompletionWithMessagesAsStream: aChatObjectsArray model: 
 						((json at: #choices) first at: #finish_reason) = 'stop'
 							ifFalse: [
 								text := ((json at: #choices) first at: #delta) at: #content.
+								aStream nextPut: text.
 								Transcript show: text ] ]
 							on: Error
 							do: [ :ex | Transcript show: ex ] ] ].

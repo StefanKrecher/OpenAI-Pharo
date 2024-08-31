@@ -126,6 +126,26 @@ OpenAIChatSession >> submitPrompt: aPromptString role: aRoleString [
 ]
 
 { #category : 'adding' }
+OpenAIChatSession >> submitPrompt: aPromptString role: aRoleString outputStream: aStream [
+
+	| chat response assistantChat |
+	chat := OpenAISDKChat
+		        createWithRole: aRoleString
+		        content: aPromptString.
+	self addChat: chat.
+
+	sdk createChatCompletionWithMessagesAsStream: chats
+		            model: model
+		            temperature: temperature
+						onStream: aStream.
+
+	response := aStream contents.
+
+	assistantChat := response choices first message.
+	self addChat: assistantChat
+]
+
+{ #category : 'adding' }
 OpenAIChatSession >> submitSystemPrompt: aPromptString [
 
 	self submitPrompt: aPromptString role: 'system'
@@ -135,6 +155,12 @@ OpenAIChatSession >> submitSystemPrompt: aPromptString [
 OpenAIChatSession >> submitUserPrompt: aPromptString [
 
 	self submitPrompt: aPromptString role: 'user'
+]
+
+{ #category : 'adding' }
+OpenAIChatSession >> submitUserPrompt: aPromptString outputStream: aStream [
+
+	self submitPrompt: aPromptString role: 'user' outputStream: aStream.
 ]
 
 { #category : 'accessing' }
