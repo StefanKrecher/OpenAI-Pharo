@@ -131,7 +131,7 @@ OpenAISDK >> createChatCompletionWithMessagesAsStream: aChatObjectsArray model: 
 		         -> (aChatObjectsArray collect: [ :e | e toDictionary ])).
 		        ('model' -> aModelString).
 		        ('temperature' -> aTemperatureFloat).
-		        ('stream' -> 'true') } asDictionary.
+		        ('stream' -> true) } asDictionary.
 	jsonData := NeoJSONWriter toString: dict.
 
 	listOfChunks := OrderedCollection new.
@@ -140,7 +140,8 @@ OpenAISDK >> createChatCompletionWithMessagesAsStream: aChatObjectsArray model: 
 	myclient := self client.
 	myclient
 		url: self baseURL , '/chat/completions';
-		entity: (ZnStringEntity with: jsonData type: ZnMimeType applicationJson).
+		entity: (ZnStringEntity with: jsonData type: ZnMimeType applicationJson);
+		streaming: true.
 
 
 	"Send the request and process the streaming response"
