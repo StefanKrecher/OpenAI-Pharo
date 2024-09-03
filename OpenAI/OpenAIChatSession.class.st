@@ -139,10 +139,10 @@ OpenAIChatSession >> submitPrompt: aPromptString role: aRoleString outputStream:
 		            temperature: temperature
 						onStream: aStream.
 
-	response := aStream contents.
+	"response := aStream contents.
 
 	assistantChat := response choices first message.
-	self addChat: assistantChat
+	self addChat: assistantChat"
 ]
 
 { #category : 'adding' }
