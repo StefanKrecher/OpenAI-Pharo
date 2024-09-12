@@ -170,7 +170,7 @@ OpenAISDK >> createChatCompletionWithMessagesAsStream: aChatObjectsArray model: 
 							ifFalse: [
 								text := ((json at: #choices) first at: #delta) at: #content.
 								aStream nextPut: (OpenAISDKChat createWithRole: 'assistant' content: text).
-								Transcript show: text ] ]
+								"Transcript show: text" ] ]
 							on: Error
 							do: [ :ex | Transcript show: ex ] ] ].
 				listOfChunks addAll: completionChunkObjectsAsText ].
