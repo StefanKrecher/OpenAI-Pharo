@@ -152,6 +152,12 @@ OpenAIChatSession >> submitSystemPrompt: aPromptString [
 ]
 
 { #category : 'adding' }
+OpenAIChatSession >> submitSystemPrompt: aPromptString outputStream: aStream [
+
+	self submitPrompt: aPromptString role: 'system' outputStream: aStream.
+]
+
+{ #category : 'adding' }
 OpenAIChatSession >> submitUserPrompt: aPromptString [
 
 	self submitPrompt: aPromptString role: 'user'

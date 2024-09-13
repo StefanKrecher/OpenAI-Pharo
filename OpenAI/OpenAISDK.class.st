@@ -141,6 +141,7 @@ OpenAISDK >> createChatCompletionWithMessagesAsStream: aChatObjectsArray model: 
 	myclient
 		url: self baseURL , '/chat/completions';
 		entity: (ZnStringEntity with: jsonData type: ZnMimeType applicationJson);
+		method: 'POST';
 		streaming: true.
 
 
@@ -170,7 +171,7 @@ OpenAISDK >> createChatCompletionWithMessagesAsStream: aChatObjectsArray model: 
 							ifFalse: [
 								text := ((json at: #choices) first at: #delta) at: #content.
 								aStream nextPut: (OpenAISDKChat createWithRole: 'assistant' content: text).
-								"Transcript show: text" ] ]
+								Transcript show: text ] ]
 							on: Error
 							do: [ :ex | Transcript show: ex ] ] ].
 				listOfChunks addAll: completionChunkObjectsAsText ].
