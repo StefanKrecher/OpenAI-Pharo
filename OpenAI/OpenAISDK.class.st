@@ -113,7 +113,7 @@ OpenAISDK >> createChatCompletionWithMessages: aChatObjectsArray model: aModelSt
 		entity: (ZnEntity with: json type: ZnMimeType applicationJson);
 		url: self baseURL , '/chat/completions'.
 
-	response := theClient logToTranscript; logLevel: 3;  post.
+	response := theClient "logToTranscript; logLevel: 3;"  post.
 
 	decoded := NeoJSONReader fromString: response.
 	(decoded includesKey: 'error') ifTrue: [
@@ -140,7 +140,8 @@ OpenAISDK >> createChatCompletionWithMessagesAsStream: aChatObjectsArray model: 
 	myclient := self client.
 	myclient
 		url: self baseURL , '/chat/completions';
-		entity: (ZnStringEntity with: jsonData type: ZnMimeType applicationJson);
+		entity:
+			(ZnStringEntity with: jsonData type: ZnMimeType applicationJson);
 		method: 'POST';
 		streaming: true.
 
@@ -170,8 +171,8 @@ OpenAISDK >> createChatCompletionWithMessagesAsStream: aChatObjectsArray model: 
 						((json at: #choices) first at: #finish_reason) = 'stop'
 							ifFalse: [
 								text := ((json at: #choices) first at: #delta) at: #content.
-								aStream nextPut: (OpenAISDKChat createWithRole: 'assistant' content: text).
-								Transcript show: text ] ]
+								aStream nextPut:
+									(OpenAISDKChat createWithRole: 'assistant' content: text) ] ]
 							on: Error
 							do: [ :ex | Transcript show: ex ] ] ].
 				listOfChunks addAll: completionChunkObjectsAsText ].
