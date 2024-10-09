@@ -31,6 +31,28 @@ Class {
 }
 
 { #category : 'public' }
+OpenAISDK class >> createRealtimeWithAPIKey: anAPIKeyString [
+
+	"Get an API key at https://platform.openai.com/account/api-keys"
+
+	"https://platform.openai.com/docs/api-reference/authentication"
+
+	| client |
+	client := ZnClient new.
+	client headerAt: 'Content-Type' put: 'application/json'.
+	client headerAt: 'Authorization' put: 'Bearer ' , anAPIKeyString.
+	client headerAt: 'OpenAI-Beta' put: 'realtime=v1'.
+	client method: #GET;
+		headerAt: 'Upgrade' put: 'websocket';
+		headerAt: 'Connection' put: 'Upgrade';
+		headerAt: 'Sec-WebSocket-Version' put: '13';
+		headerAt: 'Sec-WebSocket-Key' put: ZnWebSocketUtils newClientKey.
+	client url: 'wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-10-01'.
+	client execute.
+	^ZnWebSocket onClient: client.
+]
+
+{ #category : 'public' }
 OpenAISDK class >> createWithAPIKey: anAPIKeyString [
 
 	^ self createWithAPIKey: anAPIKeyString organization: nil
@@ -123,7 +145,7 @@ OpenAISDK >> createChatCompletionWithMessages: aChatObjectsArray model: aModelSt
 ]
 
 { #category : 'public' }
-OpenAISDK >> createChatCompletionWithMessagesAsStream: aChatObjectsArray model: aModelString temperature: aTemperatureFloat onStream: aStream [
+OpenAISDK >> createChatCompletionWithMessagesAsStream: aChatObjectsArray model: aModelString temperature: aTemperatureFloat topP: aTopPValue onStream: aStream [
 
 	| dict myclient jsonData stream listOfChunks chunkObjects |
 	dict := {
@@ -131,6 +153,7 @@ OpenAISDK >> createChatCompletionWithMessagesAsStream: aChatObjectsArray model: 
 		         -> (aChatObjectsArray collect: [ :e | e toDictionary ])).
 		        ('model' -> aModelString).
 		        ('temperature' -> aTemperatureFloat).
+					('top_p' -> aTopPValue) .
 		        ('stream' -> true) } asDictionary.
 	jsonData := NeoJSONWriter toString: dict.
 

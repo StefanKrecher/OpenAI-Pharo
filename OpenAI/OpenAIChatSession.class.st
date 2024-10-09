@@ -26,7 +26,8 @@ Class {
 		'sdk',
 		'chats',
 		'model',
-		'temperature'
+		'temperature',
+		'topP'
 	],
 	#category : 'OpenAI-Core',
 	#package : 'OpenAI',
@@ -36,11 +37,15 @@ Class {
 { #category : 'instance creation' }
 OpenAIChatSession class >> startWithSDK: anOpenAISDK [
 
-	^ self startWithSDK: anOpenAISDK model: nil  temperature: nil.
+	^ self
+		  startWithSDK: anOpenAISDK
+		  model: nil
+		  temperature: nil
+		  topP: nil
 ]
 
 { #category : 'instance creation' }
-OpenAIChatSession class >> startWithSDK: anOpenAISDK model: aModelString temperature: aTemperatureFloat [
+OpenAIChatSession class >> startWithSDK: anOpenAISDK model: aModelString temperature: aTemperatureFloat topP: anObject [
 
 	| c |
 	c := self new sdk: anOpenAISDK.
@@ -137,6 +142,7 @@ OpenAIChatSession >> submitPrompt: aPromptString role: aRoleString outputStream:
 	sdk createChatCompletionWithMessagesAsStream: chats
 		            model: model
 		            temperature: temperature
+						topP: topP 
 						onStream: aStream.
 
 	"response := aStream contents.
@@ -179,4 +185,16 @@ OpenAIChatSession >> temperature [
 OpenAIChatSession >> temperature: anObject [
 
 	temperature := anObject
+]
+
+{ #category : 'accessing' }
+OpenAIChatSession >> topP [
+
+	^ topP
+]
+
+{ #category : 'accessing' }
+OpenAIChatSession >> topP: anObject [
+
+	topP := anObject
 ]
