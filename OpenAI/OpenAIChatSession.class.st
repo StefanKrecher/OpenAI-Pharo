@@ -55,6 +55,8 @@ OpenAIChatSession class >> startWithSDK: anOpenAISDK model: aModelString tempera
 	aTemperatureFloat
 		ifNil: [ c temperature: 1.0 ]
 		ifNotNil: [ c temperature: aTemperatureFloat ].
+	anObject ifNil: [ c topP: 0.8 ]
+				ifNotNil: [ c topP: anObject ].
 	^ c
 ]
 

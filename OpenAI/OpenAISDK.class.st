@@ -200,7 +200,7 @@ OpenAISDK >> createChatCompletionWithMessagesAsStream: aChatObjectsArray model: 
 								aStream nextPut:
 									(OpenAISDKChat createWithRole: 'assistant_stop' content: '')
 									 ]
-								 ]
+								 ] 
 							on: Error
 							do: [ :ex | Transcript show: ex ] ] ].
 				listOfChunks addAll: completionChunkObjectsAsText ].
