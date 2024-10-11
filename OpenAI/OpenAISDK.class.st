@@ -153,7 +153,7 @@ OpenAISDK >> createChatCompletionWithMessagesAsStream: aChatObjectsArray model: 
 		         -> (aChatObjectsArray collect: [ :e | e toDictionary ])).
 		        ('model' -> aModelString).
 		        ('temperature' -> aTemperatureFloat).
-					('top_p' -> aTopPValue) .
+				"('top_p' -> aTopPValue)."
 		        ('stream' -> true) } asDictionary.
 	jsonData := NeoJSONWriter toString: dict.
 
