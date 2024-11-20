@@ -213,6 +213,76 @@ OpenAISDK >> createChatCompletionWithMessagesAsStream: aChatObjectsArray model: 
 ]
 
 { #category : 'public' }
+OpenAISDK >> createChatCompletionWithMessagesAsStream: aChatObjectsArray model: aModelString temperature: aTemperatureFloat topP: aTopPValue presencePenalty: aPresencePenalty freqquencePenalty: aFrequencePenalty onStream: aStream [
+
+	| dict myclient jsonData stream listOfChunks chunkObjects |
+	dict := {
+		        ('messages'
+		         -> (aChatObjectsArray collect: [ :e | e toDictionary ])).
+		        ('model' -> aModelString).
+		        ('temperature' -> aTemperatureFloat).
+				  ('top_p' -> aTopPValue asNumber).
+					('presence_penalty' -> aPresencePenalty asNumber).
+					('frequency_penalty' -> aFrequencePenalty asNumber).					
+		        ('stream' -> true) } asDictionary.
+	jsonData := NeoJSONWriter toString: dict.
+
+	listOfChunks := OrderedCollection new.
+	chunkObjects := OrderedCollection new.
+
+	myclient := self client.
+	myclient
+		url: self baseURL , '/chat/completions';
+		entity:
+			(ZnStringEntity with: jsonData type: ZnMimeType applicationJson);
+		method: 'POST';
+		streaming: true.
+
+
+	"Send the request and process the streaming response"
+	stream := myclient execute.
+
+	stream
+		ifNotNil: [
+			[ stream atEnd ] whileFalse: [
+				| oc completionChunkObjectsAsText |
+				oc := OrderedCollection new: stream limit withAll: nil.
+				stream readInto: oc startingAt: 1 count: stream limit.
+
+				completionChunkObjectsAsText := oc asByteArray asString lines
+					                                reject: [ :each |
+					                                each isEmpty or: [
+						                                each beginsWith: 'data: [DONE]' ] ].
+				completionChunkObjectsAsText do: [ :o |
+					| content json text |
+					o isEmptyOrNil ifFalse: [
+						content := '' join: {
+								           ${.
+								           (o asString copyAfter: ${) }.
+						[
+						json := NeoJSONReader fromString: content.
+						((json at: #choices) first at: #finish_reason) = 'stop'
+							ifFalse: [
+								text := ((json at: #choices) first at: #delta) at: #content.
+								aStream nextPut:
+									(OpenAISDKChat createWithRole: 'assistant' content: text) ]
+								ifTrue: [ 
+								aStream nextPut:
+									(OpenAISDKChat createWithRole: 'assistant_stop' content: '')
+									 ]
+								 ] 
+							on: Error
+							do: [ :ex | Transcript show: ex ] ] ].
+				listOfChunks addAll: completionChunkObjectsAsText ].
+			
+			stream close ]
+		ifNil: [
+			Transcript
+				show: 'Request failed with status ';
+				cr ]
+]
+
+{ #category : 'public' }
 OpenAISDK >> createImageWithPrompt: aPromptString [
 
 	^ self createImageWithPrompt: aPromptString number: 1 size: '1024x1024'

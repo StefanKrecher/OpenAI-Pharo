@@ -27,7 +27,9 @@ Class {
 		'chats',
 		'model',
 		'temperature',
-		'topP'
+		'topP',
+		'presencePenalty',
+		'frequencyPenalty'
 	],
 	#category : 'OpenAI-Core',
 	#package : 'OpenAI',
@@ -42,10 +44,12 @@ OpenAIChatSession class >> startWithSDK: anOpenAISDK [
 		  model: nil
 		  temperature: nil
 		  topP: nil
+		  presencePenalty: nil
+		  frequencyPenalty: nil
 ]
 
 { #category : 'instance creation' }
-OpenAIChatSession class >> startWithSDK: anOpenAISDK model: aModelString temperature: aTemperatureFloat topP: anObject [
+OpenAIChatSession class >> startWithSDK: anOpenAISDK model: aModelString temperature: aTemperatureFloat topP: anObject presencePenalty: aPresencePenalty frequencyPenalty: aFrequencePenalty [
 
 	| c |
 	c := self new sdk: anOpenAISDK.
@@ -57,6 +61,11 @@ OpenAIChatSession class >> startWithSDK: anOpenAISDK model: aModelString tempera
 		ifNotNil: [ c temperature: aTemperatureFloat ].
 	anObject ifNil: [ c topP: 0.8 ]
 				ifNotNil: [ c topP: anObject ].
+	aPresencePenalty ifNil: [ c presencePenalty: 0 ]
+				ifNotNil: [ c presencePenalty: aPresencePenalty ].
+	aFrequencePenalty ifNil: [ c frequencyPenalty: 0 ]
+				ifNotNil: [ c frequencyPenalty: aFrequencePenalty ].
+
 	^ c
 ]
 
@@ -76,6 +85,18 @@ OpenAIChatSession >> chats [
 OpenAIChatSession >> chats: anObject [
 
 	chats := anObject
+]
+
+{ #category : 'accessing' }
+OpenAIChatSession >> frequencyPenalty [
+
+	^ frequencyPenalty
+]
+
+{ #category : 'accessing' }
+OpenAIChatSession >> frequencyPenalty: anObject [
+
+	frequencyPenalty := anObject
 ]
 
 { #category : 'initialization' }
@@ -100,6 +121,18 @@ OpenAIChatSession >> model [
 OpenAIChatSession >> model: anObject [
 
 	model := anObject
+]
+
+{ #category : 'accessing' }
+OpenAIChatSession >> presencePenalty [
+
+	^ presencePenalty
+]
+
+{ #category : 'accessing' }
+OpenAIChatSession >> presencePenalty: anObject [
+
+	presencePenalty := anObject
 ]
 
 { #category : 'accessing' }
