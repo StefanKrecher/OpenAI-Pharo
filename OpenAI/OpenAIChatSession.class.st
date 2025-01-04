@@ -178,6 +178,8 @@ OpenAIChatSession >> submitPrompt: aPromptString role: aRoleString outputStream:
 		            model: model
 		            temperature: temperature
 						topP: topP 
+						presencePenalty: presencePenalty 
+						freqquencePenalty: frequencyPenalty 
 						onStream: aStream.
 
 	"response := aStream contents.
