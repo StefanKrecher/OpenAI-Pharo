@@ -222,7 +222,7 @@ OpenAISDK >> createChatCompletionWithMessagesAsStream: aChatObjectsArray model: 
 		        ('model' -> aModelString).
 		        ('temperature' -> aTemperatureFloat).
 				  ('top_p' -> aTopPValue asNumber).
-					('presence_penalty' -> aPresencePenalty asNumber).
+					('presence_penalty' -> aPresencePenalty asNumber ).
 					('frequency_penalty' -> aFrequencePenalty asNumber).					
 		        ('stream' -> true) } asDictionary.
 	jsonData := NeoJSONWriter toString: dict.
