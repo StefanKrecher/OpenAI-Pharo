@@ -23,7 +23,8 @@ Class {
 	#name : 'OpenAISDK',
 	#superclass : 'Object',
 	#instVars : [
-		'client'
+		'client',
+		'responseJson'
 	],
 	#category : 'OpenAI-Core',
 	#package : 'OpenAI',
@@ -98,6 +99,18 @@ OpenAISDK >> client: anObject [
 	client := anObject
 ]
 
+{ #category : 'accessing' }
+OpenAISDK >> responseJson [
+
+	^ responseJson ifNil: [ false ]
+]
+
+{ #category : 'accessing' }
+OpenAISDK >> responseJson: aBoolean [
+
+	responseJson := aBoolean
+]
+
 { #category : 'public' }
 OpenAISDK >> createAudioWithInput: anInputString model: aModelString voice: aVoiceString [
 
@@ -128,6 +141,8 @@ OpenAISDK >> createChatCompletionWithMessages: aChatObjectsArray model: aModelSt
 		         -> (aChatObjectsArray collect: [ :e | e toDictionary ])).
 		        ('model' -> aModelString).
 		        ('temperature' -> aTemperatureFloat) } asDictionary.
+	self responseJson ifTrue: [
+		dict at: 'response_format' put: { ('type' -> 'json_object') } asDictionary ].
 	json := NeoJSONWriter toString: dict.
 
 	theClient := self client.
