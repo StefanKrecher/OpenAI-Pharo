@@ -99,18 +99,6 @@ OpenAISDK >> client: anObject [
 	client := anObject
 ]
 
-{ #category : 'accessing' }
-OpenAISDK >> responseJson [
-
-	^ responseJson ifNil: [ false ]
-]
-
-{ #category : 'accessing' }
-OpenAISDK >> responseJson: aBoolean [
-
-	responseJson := aBoolean
-]
-
 { #category : 'public' }
 OpenAISDK >> createAudioWithInput: anInputString model: aModelString voice: aVoiceString [
 
@@ -160,141 +148,89 @@ OpenAISDK >> createChatCompletionWithMessages: aChatObjectsArray model: aModelSt
 ]
 
 { #category : 'public' }
-OpenAISDK >> createChatCompletionWithMessagesAsStream: aChatObjectsArray model: aModelString temperature: aTemperatureFloat topP: aTopPValue onStream: aStream [
-
-	| dict myclient jsonData stream listOfChunks chunkObjects |
-	dict := {
-		        ('messages'
-		         -> (aChatObjectsArray collect: [ :e | e toDictionary ])).
-		        ('model' -> aModelString).
-		        ('temperature' -> aTemperatureFloat).
-				  ('top_p' -> aTopPValue asNumber).
-		        ('stream' -> true) } asDictionary.
-	jsonData := NeoJSONWriter toString: dict.
-
-	listOfChunks := OrderedCollection new.
-	chunkObjects := OrderedCollection new.
-
-	myclient := self client.
-	myclient
-		url: self baseURL , '/chat/completions';
-		entity:
-			(ZnStringEntity with: jsonData type: ZnMimeType applicationJson);
-		method: 'POST';
-		streaming: true.
-
-
-	"Send the request and process the streaming response"
-	stream := myclient execute.
-
-	stream
-		ifNotNil: [
-			[ stream atEnd ] whileFalse: [
-				| oc completionChunkObjectsAsText |
-				oc := OrderedCollection new: stream limit withAll: nil.
-				stream readInto: oc startingAt: 1 count: stream limit.
-
-				completionChunkObjectsAsText := oc asByteArray asString lines
-					                                reject: [ :each |
-					                                each isEmpty or: [
-						                                each beginsWith: 'data: [DONE]' ] ].
-				completionChunkObjectsAsText do: [ :o |
-					| content json text |
-					o isEmptyOrNil ifFalse: [
-						content := '' join: {
-								           ${.
-								           (o asString copyAfter: ${) }.
-						[
-						json := NeoJSONReader fromString: content.
-						((json at: #choices) first at: #finish_reason) = 'stop'
-							ifFalse: [
-								text := ((json at: #choices) first at: #delta) at: #content.
-								aStream nextPut:
-									(OpenAISDKChat createWithRole: 'assistant' content: text) ]
-								ifTrue: [ 
-								aStream nextPut:
-									(OpenAISDKChat createWithRole: 'assistant_stop' content: '')
-									 ]
-								 ] 
-							on: Error
-							do: [ :ex | Transcript show: ex ] ] ].
-				listOfChunks addAll: completionChunkObjectsAsText ].
-			
-			stream close ]
-		ifNil: [
-			Transcript
-				show: 'Request failed with status ';
-				cr ]
-]
-
-{ #category : 'public' }
 OpenAISDK >> createChatCompletionWithMessagesAsStream: aChatObjectsArray model: aModelString temperature: aTemperatureFloat topP: aTopPValue presencePenalty: aPresencePenalty freqquencePenalty: aFrequencePenalty onStream: aStream [
 
-	| dict myclient jsonData stream listOfChunks chunkObjects |
+	| dict myclient jsonData stream listOfChunks partialData |
+
 	dict := {
-		        ('messages'
-		         -> (aChatObjectsArray collect: [ :e | e toDictionary ])).
-		        ('model' -> aModelString).
-		        ('temperature' -> aTemperatureFloat).
-				  ('top_p' -> aTopPValue asNumber).
-					('presence_penalty' -> aPresencePenalty asNumber ).
-					('frequency_penalty' -> aFrequencePenalty asNumber).					
-		        ('stream' -> true) } asDictionary.
+		'messages' -> (aChatObjectsArray collect: [ :e | e toDictionary ]).
+		'model' -> aModelString.
+		'temperature' -> aTemperatureFloat.
+		'top_p' -> aTopPValue asNumber.
+		'presence_penalty' -> aPresencePenalty asNumber.
+		'frequency_penalty' -> aFrequencePenalty asNumber.
+		'stream' -> true.
+		'stream_options' -> { 'include_obfuscation' -> false } asDictionary } asDictionary.
 	jsonData := NeoJSONWriter toString: dict.
 
 	listOfChunks := OrderedCollection new.
-	chunkObjects := OrderedCollection new.
 
 	myclient := self client.
 	myclient
 		url: self baseURL , '/chat/completions';
-		entity:
-			(ZnStringEntity with: jsonData type: ZnMimeType applicationJson);
+		entity: (ZnEntity json: jsonData);
 		method: 'POST';
 		streaming: true.
 
-
 	"Send the request and process the streaming response"
-	stream := myclient execute.
+	stream := myclient execute ifNil: [
+		self errorCr: 'OpenAI: Executing streaming /chat/completions failed'.
+		^ self ].
 
-	stream
-		ifNotNil: [
-			[ stream atEnd ] whileFalse: [
-				| oc completionChunkObjectsAsText |
-				oc := OrderedCollection new: stream limit withAll: nil.
-				stream readInto: oc startingAt: 1 count: stream limit.
+	"Retrieve data in chunks.
+	Since any data record can also be split in chunks, ensure we read a full record before processing it."
+	partialData := OrderedCollection new: 100.
 
-				completionChunkObjectsAsText := oc asByteArray asString lines
-					                                reject: [ :each |
-					                                each isEmpty or: [
-						                                each beginsWith: 'data: [DONE]' ] ].
-				completionChunkObjectsAsText do: [ :o |
-					| content json text |
-					o isEmptyOrNil ifFalse: [
-						content := '' join: {
-								           ${.
-								           (o asString copyAfter: ${) }.
-						[
-						json := NeoJSONReader fromString: content.
-						((json at: #choices) first at: #finish_reason) = 'stop'
-							ifFalse: [
-								text := ((json at: #choices) first at: #delta) at: #content.
-								aStream nextPut:
-									(OpenAISDKChat createWithRole: 'assistant' content: text) ]
-								ifTrue: [ 
-								aStream nextPut:
-									(OpenAISDKChat createWithRole: 'assistant_stop' content: '')
-									 ]
-								 ] 
-							on: Error
-							do: [ :ex | Transcript show: ex ] ] ].
-				listOfChunks addAll: completionChunkObjectsAsText ].
-			
-			stream close ]
-		ifNil: [
-			Transcript
-				show: 'Request failed with status ';
-				cr ]
+	"Process the result until either no data is left or the marker 'stopped' is found"
+	[ stream atEnd  or: [ aStream isStopped ] ] whileFalse: [
+		| chunk lines |
+
+		"Read in chunk and perform UTF-8 decoding"
+		chunk := ByteArray new: stream limit.
+		stream next: stream limit into: chunk.
+		chunk := chunk utf8Decoded trimIfRequired.
+
+		"Add the chunk, which can consist of multiple lines, to the existing partial data.
+		Remove separators from the chunk and ignore any empty lines.
+		Then either add a new record or append to the last (partial) record."
+		lines := (chunk lines collect: [ :each | each trimIfRequired ])
+			reject: [ :each | each isEmpty ].
+		lines do: [ :each |
+			partialData add: ((each beginsWith: 'data: ')
+				ifTrue: [ each ]
+				ifFalse: [ partialData removeLast, each ]) ].
+
+		"Process full records from the partial data (should be all except possibly the last one)"
+		partialData do: [ :each |
+			((each beginsWith: 'data: {') and: [ each endsWith: '}' ])
+				ifTrue: [
+					| jsonRecord |
+					jsonRecord := NeoJSONReader fromString: (each allButFirst: 5).	"Extract JSON without the 'data:' part"
+					(((jsonRecord at: #choices) first at: #finish_reason) = 'stop')
+						ifTrue: [
+							"Mark the assistent 'stopped'"
+							aStream nextPut: (OpenAISDKChat createWithRole: 'assistant_stop' content: '') ]
+						ifFalse: [
+							"Extract the text and add to chat"
+							(((jsonRecord at: #choices) first at: #delta) at: #content) ifNotNil: [ :text |
+								aStream nextPut: (OpenAISDKChat createWithRole: 'assistant' content: text) ] ] ] ].
+
+		partialData ifNotEmpty: [
+			partialData last ifNotNil: [ :last |
+				| isPartial |
+				isPartial := (last endsWith: '}') not.
+
+				"Copy all but the partial"
+				listOfChunks addAll: (isPartial
+					ifTrue: [ partialData allButLast ]
+					ifFalse: [ partialData ]).
+
+				"Keep only the last if it is partial"
+				partialData removeAll.
+				isPartial
+					ifTrue: [ partialData add: last ] ] ] ].
+
+	stream close
 ]
 
 { #category : 'public' }
@@ -331,11 +267,7 @@ OpenAISDK >> createImageWithPrompt: aPromptString number: aNumberString size: aS
 { #category : 'public' }
 OpenAISDK >> createTranscriptFromBinary: byteArray model: aModelString [
 
-	| dict theClient json response znMulti |
-	dict := {
-		        ('file' -> byteArray).
-		        ('model' -> aModelString) } asDictionary.
-	json := NeoJSONWriter toString: dict.
+	| theClient response znMulti |
 
 	znMulti := ZnMultiPartFormDataEntity new.
 	znMulti addPart: (ZnMimePart fieldName: 'model' value: aModelString).
@@ -348,7 +280,17 @@ OpenAISDK >> createTranscriptFromBinary: byteArray model: aModelString [
 
 	response := theClient post.
 	^ response
+]
 
+{ #category : 'public' }
+OpenAISDK >> listModelIds [
+
+	"Answer a collection of model identifiers"
+
+	"https://platform.openai.com/docs/api-reference/models/list"
+
+	^ self listModels data
+		collect: [ :e | e id ]
 ]
 
 { #category : 'public' }
@@ -368,32 +310,16 @@ OpenAISDK >> listModels [
 	^ OpenAISDKModels createWithAPIResponse: decoded
 ]
 
-{ #category : 'public' }
-OpenAISDK >> listModelsAsText [
-	"https://platform.openai.com/docs/api-reference/models/list"
+{ #category : 'accessing' }
+OpenAISDK >> responseJson [
 
-	| theClient response decoded |
-	theClient := self client.
-	theClient url: self baseURL , '/models'.
-
-	response := theClient get.
-
-	decoded := NeoJSONReader fromString: response.
-	^(decoded at: #data) collect: [ :entry | entry at: #id ]
+	^ responseJson ifNil: [ false ]
 ]
 
-{ #category : 'public' }
-OpenAISDK >> listModelsDict [
-	"https://platform.openai.com/docs/api-reference/models/list"
+{ #category : 'accessing' }
+OpenAISDK >> responseJson: aBoolean [
 
-	| theClient response decoded |
-	theClient := self client.
-	theClient url: self baseURL , '/models'.
-
-	response := theClient get.
-
-	decoded := NeoJSONReader fromString: response.
-	^ decoded 
+	responseJson := aBoolean
 ]
 
 { #category : 'public' }
