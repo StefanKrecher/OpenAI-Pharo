@@ -296,13 +296,13 @@ OpenAISDK >> createResponseWithMessagesAsStream: aChatObjectsArray model: aModel
 
 	| dict jsonData clientStream myclient partialData |
 	dict := self
-		responseRequestDictionaryWithMessages: aChatObjectsArray
-		model: aModelString
-		temperature: aTemperatureFloat
-		topP: aTopPValue
-		presencePenalty: aPresencePenalty
-		frequencyPenalty: aFrequencyPenalty
-		stream: true.
+		        responseRequestDictionaryWithMessages: aChatObjectsArray
+		        model: aModelString
+		        temperature: aTemperatureFloat
+		        topP: aTopPValue
+		        presencePenalty: aPresencePenalty
+		        frequencyPenalty: aFrequencyPenalty
+		        stream: true.
 	jsonData := NeoJSONWriter toString: dict.
 
 	myclient := self client.
@@ -313,16 +313,17 @@ OpenAISDK >> createResponseWithMessagesAsStream: aChatObjectsArray model: aModel
 		streaming: true.
 
 	clientStream := myclient execute ifNil: [
-		self errorCr: 'OpenAI: Executing streaming /responses failed'.
-		^ self ].
+			                self errorCr:
+				                'OpenAI: Executing streaming /responses failed'.
+			                ^ self ].
 
 	partialData := String new writeStream.
 	[ clientStream atEnd or: [ aStream isStopped ] ] whileFalse: [
-		| chunk |
-		chunk := ByteArray new: clientStream limit.
-		clientStream next: clientStream limit into: chunk.
-		partialData nextPutAll: chunk utf8Decoded.
-		self flushResponseStreamBuffer: partialData on: aStream ].
+			| chunk |
+			chunk := clientStream upToEnd.
+			"clientStream next: clientStream limit into: chunk."
+			partialData nextPutAll: chunk utf8Decoded.
+			self flushResponseStreamBuffer: partialData on: aStream ].
 
 	self flushResponseStreamBuffer: partialData on: aStream.
 	clientStream close
@@ -351,11 +352,12 @@ OpenAISDK >> flushResponseStreamBuffer: aWriteStream on: anOutputStream [
 
 	| buffer records trailing |
 	buffer := aWriteStream contents.
-	(buffer includesSubstring: String crlf , String crlf) ifFalse: [ ^ self ].
+	(buffer includesSubstring: String lf , String lf) ifFalse: [
+		^ self ].
 	records := buffer findTokens: String crlf , String crlf.
 	trailing := (buffer endsWith: String crlf , String crlf)
-		ifTrue: [ '' ]
-		ifFalse: [ records removeLast ].
+		            ifTrue: [ '' ]
+		            ifFalse: [ records removeLast ].
 	aWriteStream reset.
 	aWriteStream nextPutAll: trailing.
 	records do: [ :each |
@@ -394,22 +396,26 @@ OpenAISDK >> listModels [
 OpenAISDK >> processResponseStreamRecord: aRecordString on: anOutputStream [
 
 	| lines eventName dataLines jsonRecord |
-	lines := (aRecordString lines collect: [ :each | each trimBoth ]) reject: [ :each | each isEmpty ].
+	lines := (aRecordString lines collect: [ :each | each trimBoth ])
+		         reject: [ :each | each isEmpty ].
 	lines ifEmpty: [ ^ self ].
 	eventName := nil.
 	dataLines := OrderedCollection new.
 	lines do: [ :each |
-		(each beginsWith: 'event: ')
-			ifTrue: [ eventName := each allButFirst: 7 ]
-			ifFalse: [
-				(each beginsWith: 'data: ')
-					ifTrue: [ dataLines add: (each allButFirst: 6) ] ] ].
+			(each beginsWith: 'event: ')
+				ifTrue: [ eventName := each allButFirst: 7 ]
+				ifFalse: [
+						(each beginsWith: 'data: ') ifTrue: [
+							dataLines add: (each allButFirst: 6) ] ] ].
 	dataLines ifEmpty: [ ^ self ].
-	(dataLines size = 1 and: [ dataLines first = '[DONE]' ]) ifTrue: [ ^ self ].
-	jsonRecord := NeoJSONReader fromString: (String streamContents: [ :stream |
-		dataLines do: [ :each | stream nextPutAll: each ] ]).
+	(dataLines size = 1 and: [ dataLines first = '[DONE]' ]) ifTrue: [
+		^ self ].
+	jsonRecord := NeoJSONReader fromString:
+		              (String streamContents: [ :stream |
+			               dataLines do: [ :each | stream nextPutAll: each ] ]).
 	jsonRecord at: 'type' ifAbsentPut: [ eventName ].
-	anOutputStream nextPut: (OpenAISDKResponseStreamEvent createWithAPIResponse: jsonRecord)
+	anOutputStream nextPut:
+		(OpenAISDKResponseStreamEvent createWithAPIResponse: jsonRecord)
 ]
 
 { #category : 'private' }
@@ -423,23 +429,29 @@ OpenAISDK >> responseEventFromJson: aDictionary defaultType: anEventName [
 OpenAISDK >> responseInputItemFromChat: aChatObject [
 
 	^ {
-		'type' -> 'message'.
-		'role' -> aChatObject role.
-		'content' -> {
-			{
-				'type' -> 'input_text'.
-				'text' -> aChatObject content } asDictionary } } asDictionary
+		  ('type' -> 'message').
+		  ('role' -> aChatObject role).
+		  ('content' -> { {
+			   ('type' -> (aChatObject role = 'assistant'
+				    ifTrue: [ 'output_text' ]
+				    ifFalse: [ 'input_text' ])).
+			   ('text' -> aChatObject content) } asDictionary }) } asDictionary
 ]
 
 { #category : 'private' }
 OpenAISDK >> responseInputItemsFromMessages: aChatObjectsArray [
 
-	| messages |
+	| messages inputItems |
 	messages := aChatObjectsArray asOrderedCollection.
 	(messages notEmpty and: [ messages first role = 'system' ]) ifTrue: [
 		messages := messages allButFirst ].
-	^ messages collect: [ :each |
-		self responseInputItemFromChat: each ]
+	inputItems := messages collect: [ :each |
+		              self responseInputItemFromChat: each ].
+	(inputItems isEmpty and: [ aChatObjectsArray notEmpty ]) ifTrue: [
+			inputItems := OrderedCollection with:
+				              (self responseInputItemFromChat:
+					               aChatObjectsArray first) ].
+	^ inputItems
 ]
 
 { #category : 'private' }

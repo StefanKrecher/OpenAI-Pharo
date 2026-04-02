@@ -213,8 +213,8 @@ OpenAIChatSession >> submitPrompt: aPromptString roleResponses: aRoleString outp
 
 	| chat |
 	chat := OpenAISDKChat
-		createWithRole: aRoleString
-		content: aPromptString.
+		        createWithRole: aRoleString
+		        content: aPromptString.
 	self addChat: chat.
 
 	sdk
@@ -272,7 +272,10 @@ OpenAIChatSession >> submitUserPromptResponses: aPromptString [
 { #category : 'adding' }
 OpenAIChatSession >> submitUserPromptResponses: aPromptString outputStream: aStream [
 
-	self submitPrompt: aPromptString roleResponses: 'user' outputStream: aStream
+	self
+		submitPrompt: aPromptString
+		roleResponses: 'user'
+		outputStream: aStream
 ]
 
 { #category : 'accessing' }
