@@ -265,6 +265,70 @@ OpenAISDK >> createImageWithPrompt: aPromptString number: aNumberString size: aS
 ]
 
 { #category : 'public' }
+OpenAISDK >> createResponseWithMessages: aChatObjectsArray model: aModelString temperature: aTemperatureFloat [
+
+	| dict json response decoded theClient |
+	dict := self
+		responseRequestDictionaryWithMessages: aChatObjectsArray
+		model: aModelString
+		temperature: aTemperatureFloat
+		topP: nil
+		presencePenalty: nil
+		frequencyPenalty: nil
+		stream: false.
+	json := NeoJSONWriter toString: dict.
+
+	theClient := self client.
+	theClient
+		entity: (ZnEntity with: json type: ZnMimeType applicationJson);
+		url: self baseURL , '/responses'.
+
+	response := theClient post.
+	decoded := NeoJSONReader fromString: response.
+	(decoded includesKey: 'error') ifTrue: [
+		OpenAISDKException signalForObject: decoded ].
+
+	^ OpenAISDKResponse createWithAPIResponse: decoded
+]
+
+{ #category : 'public' }
+OpenAISDK >> createResponseWithMessagesAsStream: aChatObjectsArray model: aModelString temperature: aTemperatureFloat topP: aTopPValue presencePenalty: aPresencePenalty frequencyPenalty: aFrequencyPenalty onStream: aStream [
+
+	| dict jsonData clientStream myclient partialData |
+	dict := self
+		responseRequestDictionaryWithMessages: aChatObjectsArray
+		model: aModelString
+		temperature: aTemperatureFloat
+		topP: aTopPValue
+		presencePenalty: aPresencePenalty
+		frequencyPenalty: aFrequencyPenalty
+		stream: true.
+	jsonData := NeoJSONWriter toString: dict.
+
+	myclient := self client.
+	myclient
+		url: self baseURL , '/responses';
+		entity: (ZnEntity json: jsonData);
+		method: 'POST';
+		streaming: true.
+
+	clientStream := myclient execute ifNil: [
+		self errorCr: 'OpenAI: Executing streaming /responses failed'.
+		^ self ].
+
+	partialData := String new writeStream.
+	[ clientStream atEnd or: [ aStream isStopped ] ] whileFalse: [
+		| chunk |
+		chunk := ByteArray new: clientStream limit.
+		clientStream next: clientStream limit into: chunk.
+		partialData nextPutAll: chunk utf8Decoded.
+		self flushResponseStreamBuffer: partialData on: aStream ].
+
+	self flushResponseStreamBuffer: partialData on: aStream.
+	clientStream close
+]
+
+{ #category : 'public' }
 OpenAISDK >> createTranscriptFromBinary: byteArray model: aModelString [
 
 	| theClient response znMulti |
@@ -280,6 +344,22 @@ OpenAISDK >> createTranscriptFromBinary: byteArray model: aModelString [
 
 	response := theClient post.
 	^ response
+]
+
+{ #category : 'private' }
+OpenAISDK >> flushResponseStreamBuffer: aWriteStream on: anOutputStream [
+
+	| buffer records trailing |
+	buffer := aWriteStream contents.
+	(buffer includesSubstring: String crlf , String crlf) ifFalse: [ ^ self ].
+	records := buffer findTokens: String crlf , String crlf.
+	trailing := (buffer endsWith: String crlf , String crlf)
+		ifTrue: [ '' ]
+		ifFalse: [ records removeLast ].
+	aWriteStream reset.
+	aWriteStream nextPutAll: trailing.
+	records do: [ :each |
+		self processResponseStreamRecord: each on: anOutputStream ]
 ]
 
 { #category : 'public' }
@@ -310,6 +390,67 @@ OpenAISDK >> listModels [
 	^ OpenAISDKModels createWithAPIResponse: decoded
 ]
 
+{ #category : 'private' }
+OpenAISDK >> processResponseStreamRecord: aRecordString on: anOutputStream [
+
+	| lines eventName dataLines jsonRecord |
+	lines := (aRecordString lines collect: [ :each | each trimBoth ]) reject: [ :each | each isEmpty ].
+	lines ifEmpty: [ ^ self ].
+	eventName := nil.
+	dataLines := OrderedCollection new.
+	lines do: [ :each |
+		(each beginsWith: 'event: ')
+			ifTrue: [ eventName := each allButFirst: 7 ]
+			ifFalse: [
+				(each beginsWith: 'data: ')
+					ifTrue: [ dataLines add: (each allButFirst: 6) ] ] ].
+	dataLines ifEmpty: [ ^ self ].
+	(dataLines size = 1 and: [ dataLines first = '[DONE]' ]) ifTrue: [ ^ self ].
+	jsonRecord := NeoJSONReader fromString: (String streamContents: [ :stream |
+		dataLines do: [ :each | stream nextPutAll: each ] ]).
+	jsonRecord at: 'type' ifAbsentPut: [ eventName ].
+	anOutputStream nextPut: (OpenAISDKResponseStreamEvent createWithAPIResponse: jsonRecord)
+]
+
+{ #category : 'private' }
+OpenAISDK >> responseEventFromJson: aDictionary defaultType: anEventName [
+
+	aDictionary at: 'type' ifAbsentPut: [ anEventName ].
+	^ OpenAISDKResponseStreamEvent createWithAPIResponse: aDictionary
+]
+
+{ #category : 'private' }
+OpenAISDK >> responseInputItemFromChat: aChatObject [
+
+	^ {
+		'type' -> 'message'.
+		'role' -> aChatObject role.
+		'content' -> {
+			{
+				'type' -> 'input_text'.
+				'text' -> aChatObject content } asDictionary } } asDictionary
+]
+
+{ #category : 'private' }
+OpenAISDK >> responseInputItemsFromMessages: aChatObjectsArray [
+
+	| messages |
+	messages := aChatObjectsArray asOrderedCollection.
+	(messages notEmpty and: [ messages first role = 'system' ]) ifTrue: [
+		messages := messages allButFirst ].
+	^ messages collect: [ :each |
+		self responseInputItemFromChat: each ]
+]
+
+{ #category : 'private' }
+OpenAISDK >> responseInstructionsFromMessages: aChatObjectsArray [
+
+	aChatObjectsArray ifEmpty: [ ^ nil ].
+	^ aChatObjectsArray first role = 'system'
+		ifTrue: [ aChatObjectsArray first content ]
+		ifFalse: [ nil ]
+]
+
 { #category : 'accessing' }
 OpenAISDK >> responseJson [
 
@@ -320,6 +461,31 @@ OpenAISDK >> responseJson [
 OpenAISDK >> responseJson: aBoolean [
 
 	responseJson := aBoolean
+]
+
+{ #category : 'private' }
+OpenAISDK >> responseRequestDictionaryWithMessages: aChatObjectsArray model: aModelString temperature: aTemperatureFloat topP: aTopPValue presencePenalty: aPresencePenalty frequencyPenalty: aFrequencyPenalty stream: aBoolean [
+
+	| dict instructions |
+	dict := OrderedDictionary new.
+	instructions := self responseInstructionsFromMessages: aChatObjectsArray.
+	instructions ifNotNil: [
+		dict at: 'instructions' put: instructions ].
+	dict
+		at: 'input' put: (self responseInputItemsFromMessages: aChatObjectsArray);
+		at: 'model' put: aModelString;
+		at: 'temperature' put: aTemperatureFloat.
+	aTopPValue ifNotNil: [
+		dict at: 'top_p' put: aTopPValue asNumber ].
+	aPresencePenalty ifNotNil: [
+		dict at: 'presence_penalty' put: aPresencePenalty asNumber ].
+	aFrequencyPenalty ifNotNil: [
+		dict at: 'frequency_penalty' put: aFrequencyPenalty asNumber ].
+	aBoolean ifTrue: [
+		dict at: 'stream' put: true ].
+	self responseJson ifTrue: [
+		dict at: 'text' put: { ('format' -> { ('type' -> 'json_object') } asDictionary) } asDictionary ].
+	^ dict
 ]
 
 { #category : 'public' }
