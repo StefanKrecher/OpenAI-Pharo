@@ -431,11 +431,20 @@ OpenAISDK >> responseInputItemFromChat: aChatObject [
 	^ {
 		  ('type' -> 'message').
 		  ('role' -> aChatObject role).
-		  ('content' -> { {
-			   ('type' -> (aChatObject role = 'assistant'
-				    ifTrue: [ 'output_text' ]
-				    ifFalse: [ 'input_text' ])).
-			   ('text' -> aChatObject content) } asDictionary }) } asDictionary
+		  ('content' -> (aChatObject role = 'assistant'
+			    ifTrue: [
+					    { {
+						    ('type' -> 'output_text').
+						    ('text' -> aChatObject content) } asDictionary } ]
+			    ifFalse: [
+					    {
+						    {
+							    ('type' -> 'input_file').
+							    ('file_id' -> 'file-7Emaz1zh1TEW1L4f1a7D33') "FIXE FILE_ID" } asDictionary.
+						    {
+							    ('type' -> 'input_text').
+							    ('text' -> aChatObject content) } asDictionary } ])) }
+		  asDictionary
 ]
 
 { #category : 'private' }
