@@ -150,7 +150,7 @@ OpenAISDK >> createChatCompletionWithMessages: aChatObjectsArray model: aModelSt
 { #category : 'public' }
 OpenAISDK >> createChatCompletionWithMessagesAsStream: aChatObjectsArray model: aModelString temperature: aTemperatureFloat topP: aTopPValue presencePenalty: aPresencePenalty freqquencePenalty: aFrequencePenalty onStream: aStream [
 
-	| dict myclient jsonData stream listOfChunks partialData |
+	| dict myclient jsonData stream partialData |
 
 	dict := {
 		'messages' -> (aChatObjectsArray collect: [ :e | e toDictionary ]).
@@ -162,8 +162,6 @@ OpenAISDK >> createChatCompletionWithMessagesAsStream: aChatObjectsArray model: 
 		'stream' -> true.
 		'stream_options' -> { 'include_obfuscation' -> false } asDictionary } asDictionary.
 	jsonData := NeoJSONWriter toString: dict.
-
-	listOfChunks := OrderedCollection new.
 
 	myclient := self client.
 	myclient
@@ -219,11 +217,6 @@ OpenAISDK >> createChatCompletionWithMessagesAsStream: aChatObjectsArray model: 
 			partialData last ifNotNil: [ :last |
 				| isPartial |
 				isPartial := (last endsWith: '}') not.
-
-				"Copy all but the partial"
-				listOfChunks addAll: (isPartial
-					ifTrue: [ partialData allButLast ]
-					ifFalse: [ partialData ]).
 
 				"Keep only the last if it is partial"
 				partialData removeAll.
