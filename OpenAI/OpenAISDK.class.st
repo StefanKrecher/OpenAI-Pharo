@@ -102,22 +102,100 @@ OpenAISDK >> client: anObject [
 { #category : 'public' }
 OpenAISDK >> createAudioWithInput: anInputString model: aModelString voice: aVoiceString [
 
-	| dict theClient json response |
-	dict := {
-		        ('input'
-		         -> anInputString ).
-		        ('model' -> aModelString).
-		        ('voice' -> aVoiceString ) } asDictionary.
-	json := NeoJSONWriter toString: dict.
+	| json processes clients results startTimes waitSemaphore result |
 
-	theClient := self client.
-	theClient
-		entity: (ZnEntity with: json type: ZnMimeType applicationJson);
-		url: self baseURL , '/audio/speech'.
+	"Create JSON input structure"
+	json := NeoJSONWriter toString: {
+		#input -> anInputString.
+		#model -> aModelString.
+		#voice -> aVoiceString } asDictionary.
 
-	response := theClient post.
-^response
+	"Create a set of Processes with a new client (to prevent using the same client instance in multiple
+	processes). Each Process is created with a Delay to start the cliebt. As soon as a client has received
+	a full response, the other Processes and client(s) are stopped. Each Process stores its result in a
+	separate location. In this same location any error that occurred, will also be stored."
+	processes := Array new: 3.
+	clients := Array new: processes size.
+	results := Array new: processes size.
+	startTimes := #(0 5 15).
+	result := nil.
 
+	"Create a Semaphore to let (this) owning Process wait for subprocesses"
+	waitSemaphore := Semaphore new.
+
+	"Start up all Processes (only one will become active, others will start waiting).
+	Each Process will normally end with a signal to (wake up of) the owning Process."
+	1 to: processes size do: [ :index |
+		processes at: index put: [
+
+			"Wrap code in error handler for any exceptions during communication"
+			[
+				| localClient |
+
+				"Perform delay before starting actual work"
+				(Delay forSeconds: (startTimes at: index)) wait.
+
+				"Start a new client"
+				localClient := self createStreamingAudioClientOn: json.
+
+				"Register the new client and start streaming the result"
+				clients at: index put: localClient.
+				results at: index put: localClient execute upToEnd.
+
+				"Results is received, wake up the owning Process"
+				waitSemaphore signal.
+			] on: Error do: [ :error |
+
+				"Store error in result"
+				results at: index put: (OpenAIParallelClientError error: error).
+
+				"Wake up the owning Process"
+				waitSemaphore signal ] ] fork ].
+
+	"Start waiting for any of the subprocesses"
+	[ processes anySatisfy: [ :each | each isNotNil ] ] whileTrue: [
+
+		"Wait for a signal"
+		waitSemaphore wait.
+
+		"Handle results and/or errors"
+		results withIndexDo: [ :each :index |
+			| removeFrom removeTo |
+
+			"Remember if we want to remove result entries (and related items)"
+			removeFrom := 0.
+			removeTo := -1.
+
+			"Distinguish error and valid result"
+			each class == OpenAIParallelClientError
+				ifTrue: [
+					"Log error"
+					self errorCr: 'Failed to retrieve audio in TTS Process ', index printString, ' error: ', each error printString.
+
+					"Remove this entry"
+					removeFrom := removeTo := index ]
+				ifFalse: [
+					each ifNotNil: [
+						"Store result (it is a valid result)"
+						result := each.
+						
+						"Remove all entries (we are done)"
+						removeFrom := 1.
+						removeTo := processes size ] ].
+
+			"Remove Process, client and result (if so requested)"
+			removeFrom to: removeTo do: [ :removeIndex |
+				(clients at: removeIndex) ifNotNil: [ :localClient |
+					localClient close.
+					clients at: removeIndex put: nil ].
+				(processes at: removeIndex) ifNotNil: [ :process |
+					(process isTerminating or: [ process isTerminated ])
+						ifFalse: [ process terminate ].
+					processes at: removeIndex put: nil ].
+				results at: removeIndex put: nil ] ] ].
+
+	"Answer final result or an empty Array if no result is retrieved"
+	^ result ifNil: [ #() ]
 ]
 
 { #category : 'public' }
@@ -255,6 +333,31 @@ OpenAISDK >> createImageWithPrompt: aPromptString number: aNumberString size: aS
 		OpenAISDKException signalForObject: decoded ].
 
 	^ OpenAISDKImage createWithAPIResponse: decoded
+]
+
+{ #category : 'private' }
+OpenAISDK >> createStreamingAudioClientOn: jsonString [
+
+	"Answer a new ZnClient based on the global ZnClient which is stored in the receiver.
+	Use the headers from this global client to set the headers of the new client.
+	Run the client in streaming mode to allow early recognition of some data coming in.
+	Limit the timeout from default 60s to 30s to prevent too long delays.
+	Do NOT perform any retries. Retries are handled differently."
+
+	| headers |
+
+	headers := self client request headers.
+
+	^ ZnClient new
+		headerAt: 'Content-Type' put: (headers at: 'Content-Type') ;
+		headerAt: 'Authorization' put: (headers at: 'Authorization') ;
+		url: self baseURL , '/audio/speech' ;
+		timeout: 30 ;
+		numberOfRetries: 0;
+		streaming: true ;
+		entity: (ZnEntity with: jsonString type: ZnMimeType applicationJson) ;
+		method: 'POST' ;
+		yourself
 ]
 
 { #category : 'public' }
