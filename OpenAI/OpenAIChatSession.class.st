@@ -189,6 +189,23 @@ OpenAIChatSession >> submitPrompt: aPromptString role: aRoleString outputStream:
 ]
 
 { #category : 'adding' }
+OpenAIChatSession >> submitPromptGpt5: aPromptString role: aRoleString [
+
+	| chat response assistantChat |
+	chat := OpenAISDKChat
+		        createWithRole: aRoleString
+		        content: aPromptString.
+	self addChat: chat.
+
+	response := sdk
+		            createChatCompletionGpt5WithMessages: chats
+		            model: model.
+
+	assistantChat := response choices first message.
+	self addChat: assistantChat
+]
+
+{ #category : 'adding' }
 OpenAIChatSession >> submitSystemPrompt: aPromptString [
 
 	self submitPrompt: aPromptString role: 'system'

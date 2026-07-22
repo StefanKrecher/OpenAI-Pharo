@@ -199,6 +199,33 @@ OpenAISDK >> createAudioWithInput: anInputString model: aModelString voice: aVoi
 ]
 
 { #category : 'public' }
+OpenAISDK >> createChatCompletionGpt5WithMessages: aChatObjectsArray model: aModelString [
+
+	| dict theClient json response decoded |
+	dict := {
+		        ('messages'
+		         -> (aChatObjectsArray collect: [ :e | e toDictionary ])).
+		        ('model' -> aModelString).
+		         } asDictionary.
+	self responseJson ifTrue: [
+		dict at: 'response_format' put: { ('type' -> 'json_object') } asDictionary ].
+	json := NeoJSONWriter toString: dict.
+
+	theClient := self client.
+	theClient 
+		entity: (ZnEntity with: json type: ZnMimeType applicationJson);
+		url: self baseURL , '/chat/completions'.
+
+	response := theClient "logToTranscript; logLevel: 3;"  post.
+
+	decoded := NeoJSONReader fromString: response.
+	(decoded includesKey: 'error') ifTrue: [
+		OpenAISDKException signalForObject: decoded ].
+
+	^ OpenAISDKChatCompletion createWithAPIResponse: decoded
+]
+
+{ #category : 'public' }
 OpenAISDK >> createChatCompletionWithMessages: aChatObjectsArray model: aModelString temperature: aTemperatureFloat [
 
 	| dict theClient json response decoded |
