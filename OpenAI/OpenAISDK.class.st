@@ -83,8 +83,54 @@ OpenAISDK class >> openUsagePage [
 ]
 
 { #category : 'private' }
+OpenAISDK >> accumulateToolCallDeltas: aCollection in: toolCallsByIndex [
+
+	aCollection do: [ :toolCallDelta |
+		| call callIndex functionDelta |
+		callIndex := toolCallDelta at: #index.
+		call := toolCallsByIndex
+			at: callIndex
+			ifAbsentPut: [
+				OpenAISDKFunctionCall
+					id: nil
+					index: callIndex
+					name: ''
+					rawArguments: '' ].
+		(toolCallDelta at: #id ifAbsent: [ nil ]) ifNotNil: [ :callId |
+			call id: callId ].
+		functionDelta := toolCallDelta
+			at: #function
+			ifAbsent: [ Dictionary new ].
+		call appendName: (functionDelta at: #name ifAbsent: [ nil ]).
+		call appendRawArguments:
+			(functionDelta at: #arguments ifAbsent: [ nil ]) ]
+]
+
+{ #category : 'private' }
 OpenAISDK >> baseURL [ 
 ^ 'https://api.openai.com/v1'
+]
+
+{ #category : 'private' }
+OpenAISDK >> chatCompletionRequestWithMessages: aChatObjectsArray model: aModelString temperature: aTemperatureFloat topP: aTopPValue presencePenalty: aPresencePenalty frequencyPenalty: aFrequencyPenalty tools: aFunctionsCollection [
+
+	| dict |
+	dict := {
+		'messages' -> (aChatObjectsArray collect: [ :each | each toDictionary ]).
+		'model' -> aModelString.
+		'temperature' -> aTemperatureFloat.
+		'top_p' -> aTopPValue asNumber.
+		'presence_penalty' -> aPresencePenalty asNumber.
+		'frequency_penalty' -> aFrequencyPenalty asNumber.
+		'stream' -> true.
+		'stream_options' -> { 'include_obfuscation' -> false } asDictionary } asDictionary.
+	aFunctionsCollection ifNotEmpty: [
+		dict
+			at: 'tools'
+			put: (aFunctionsCollection collect: [ :each | each asToolDictionary ]);
+			at: 'tool_choice'
+			put: 'auto' ].
+	^ dict
 ]
 
 { #category : 'accessing' }
@@ -255,17 +301,29 @@ OpenAISDK >> createChatCompletionWithMessages: aChatObjectsArray model: aModelSt
 { #category : 'public' }
 OpenAISDK >> createChatCompletionWithMessagesAsStream: aChatObjectsArray model: aModelString temperature: aTemperatureFloat topP: aTopPValue presencePenalty: aPresencePenalty freqquencePenalty: aFrequencePenalty onStream: aStream [
 
-	| dict myclient jsonData stream partialData |
+	^ self
+		createChatCompletionWithMessagesAsStream: aChatObjectsArray
+		model: aModelString
+		temperature: aTemperatureFloat
+		topP: aTopPValue
+		presencePenalty: aPresencePenalty
+		freqquencePenalty: aFrequencePenalty
+		tools: #()
+		onStream: aStream
+]
 
-	dict := {
-		'messages' -> (aChatObjectsArray collect: [ :e | e toDictionary ]).
-		'model' -> aModelString.
-		'temperature' -> aTemperatureFloat.
-		'top_p' -> aTopPValue asNumber.
-		'presence_penalty' -> aPresencePenalty asNumber.
-		'frequency_penalty' -> aFrequencePenalty asNumber.
-		'stream' -> true.
-		'stream_options' -> { 'include_obfuscation' -> false } asDictionary } asDictionary.
+{ #category : 'public' }
+OpenAISDK >> createChatCompletionWithMessagesAsStream: aChatObjectsArray model: aModelString temperature: aTemperatureFloat topP: aTopPValue presencePenalty: aPresencePenalty freqquencePenalty: aFrequencePenalty tools: aFunctionsCollection onStream: aStream [
+
+	| dict myclient jsonData stream partialData toolCallsByIndex |
+	dict := self
+		chatCompletionRequestWithMessages: aChatObjectsArray
+		model: aModelString
+		temperature: aTemperatureFloat
+		topP: aTopPValue
+		presencePenalty: aPresencePenalty
+		frequencyPenalty: aFrequencePenalty
+		tools: aFunctionsCollection.
 	jsonData := NeoJSONWriter toString: dict.
 
 	myclient := self client.
@@ -275,60 +333,63 @@ OpenAISDK >> createChatCompletionWithMessagesAsStream: aChatObjectsArray model: 
 		method: 'POST';
 		streaming: true.
 
-	"Send the request and process the streaming response"
 	stream := myclient execute ifNil: [
 		self errorCr: 'OpenAI: Executing streaming /chat/completions failed'.
-		^ self ].
+		^ #() ].
 
-	"Retrieve data in chunks.
-	Since any data record can also be split in chunks, ensure we read a full record before processing it."
 	partialData := OrderedCollection new: 100.
+	toolCallsByIndex := Dictionary new.
 
-	"Process the result until either no data is left or the marker 'stopped' is found"
-	[ stream atEnd  or: [ aStream isStopped ] ] whileFalse: [
+	[
+		stream atEnd or: [ aStream isStopped ]
+	] whileFalse: [
 		| chunk lines |
-
-		"Read in chunk and perform UTF-8 decoding"
 		chunk := ByteArray new: stream limit.
 		stream next: stream limit into: chunk.
 		chunk := chunk utf8Decoded trimIfRequired.
 
-		"Add the chunk, which can consist of multiple lines, to the existing partial data.
-		Remove separators from the chunk and ignore any empty lines.
-		Then either add a new record or append to the last (partial) record."
 		lines := (chunk lines collect: [ :each | each trimIfRequired ])
 			reject: [ :each | each isEmpty ].
 		lines do: [ :each |
 			partialData add: ((each beginsWith: 'data: ')
 				ifTrue: [ each ]
-				ifFalse: [ partialData removeLast, each ]) ].
+				ifFalse: [ partialData removeLast , each ]) ].
 
-		"Process full records from the partial data (should be all except possibly the last one)"
 		partialData do: [ :each |
 			((each beginsWith: 'data: {') and: [ each endsWith: '}' ])
 				ifTrue: [
-					| jsonRecord |
-					jsonRecord := NeoJSONReader fromString: (each allButFirst: 5).	"Extract JSON without the 'data:' part"
-					(((jsonRecord at: #choices) first at: #finish_reason) = 'stop')
+					| jsonRecord choice delta finishReason |
+					jsonRecord := NeoJSONReader fromString: (each allButFirst: 5).
+					choice := (jsonRecord at: #choices) first.
+					delta := choice at: #delta ifAbsent: [ Dictionary new ].
+					finishReason := choice at: #finish_reason ifAbsent: [ nil ].
+
+					(delta at: #content ifAbsent: [ nil ]) ifNotNil: [ :text |
+						aStream nextPut: (OpenAISDKChat
+							createWithRole: 'assistant'
+							content: text) ].
+
+					self
+						accumulateToolCallDeltas:
+							(delta at: #tool_calls ifAbsent: [ #() ])
+						in: toolCallsByIndex.
+
+					(finishReason = 'stop')
 						ifTrue: [
-							"Mark the assistent 'stopped'"
-							aStream nextPut: (OpenAISDKChat createWithRole: 'assistant_stop' content: '') ]
-						ifFalse: [
-							"Extract the text and add to chat"
-							(((jsonRecord at: #choices) first at: #delta) at: #content) ifNotNil: [ :text |
-								aStream nextPut: (OpenAISDKChat createWithRole: 'assistant' content: text) ] ] ] ].
+							aStream nextPut: (OpenAISDKChat
+								createWithRole: 'assistant_stop'
+								content: '') ] ] ].
 
 		partialData ifNotEmpty: [
 			partialData last ifNotNil: [ :last |
 				| isPartial |
 				isPartial := (last endsWith: '}') not.
-
-				"Keep only the last if it is partial"
 				partialData removeAll.
-				isPartial
-					ifTrue: [ partialData add: last ] ] ] ].
+				isPartial ifTrue: [ partialData add: last ] ] ] ].
 
-	stream close
+	stream close.
+	^ (toolCallsByIndex keys asSortedCollection collect: [ :each |
+		toolCallsByIndex at: each ]) asOrderedCollection
 ]
 
 { #category : 'public' }
@@ -394,6 +455,7 @@ OpenAISDK >> createTranscriptFromBinary: byteArray model: aModelString [
 
 	znMulti := ZnMultiPartFormDataEntity new.
 	znMulti addPart: (ZnMimePart fieldName: 'model' value: aModelString).
+	znMulti addPart: (ZnMimePart fieldName: 'prompt' value: 'input is in German, output must be German.').
 	znMulti addPart: (ZnMimePart fieldName: 'file' fileName:'afile.wav' entity: (ZnByteArrayEntity bytes: byteArray) ).
 
 	theClient := self client.

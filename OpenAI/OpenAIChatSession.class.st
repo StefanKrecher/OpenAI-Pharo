@@ -29,7 +29,9 @@ Class {
 		'temperature',
 		'topP',
 		'presencePenalty',
-		'frequencyPenalty'
+		'frequencyPenalty',
+		'functions',
+		'functionCallHandler'
 	],
 	#category : 'OpenAI-Core',
 	#package : 'OpenAI',
@@ -75,6 +77,12 @@ OpenAIChatSession >> addChat: aChatObject [
 	chats add: aChatObject
 ]
 
+{ #category : 'adding' }
+OpenAIChatSession >> addFunction: anOpenAISDKFunction [
+
+	self functions add: anOpenAISDKFunction
+]
+
 { #category : 'accessing' }
 OpenAIChatSession >> chats [
 
@@ -99,10 +107,46 @@ OpenAIChatSession >> frequencyPenalty: anObject [
 	frequencyPenalty := anObject
 ]
 
+{ #category : 'accessing' }
+OpenAIChatSession >> functionCallHandler [
+
+	^ functionCallHandler
+]
+
+{ #category : 'accessing' }
+OpenAIChatSession >> functionCallHandler: aBlock [
+
+	functionCallHandler := aBlock
+]
+
+{ #category : 'accessing' }
+OpenAIChatSession >> functions [
+
+	^ functions ifNil: [ functions := OrderedCollection new ]
+]
+
+{ #category : 'accessing' }
+OpenAIChatSession >> functions: aCollection [
+
+	functions := aCollection asOrderedCollection
+]
+
+{ #category : 'private' }
+OpenAIChatSession >> handleFunctionCalls: aCollection [
+
+	aCollection ifEmpty: [ ^ self ].
+	functionCallHandler ifNil: [
+		self error: 'OpenAI returned a function call, but no functionCallHandler is configured' ].
+	aCollection do: [ :each |
+		functionCallHandler value: each name value: each arguments ]
+]
+
 { #category : 'initialization' }
 OpenAIChatSession >> initialize [
 
-	chats := OrderedCollection new
+	super initialize.
+	chats := OrderedCollection new.
+	functions := OrderedCollection new
 ]
 
 { #category : 'accessing' }
@@ -168,24 +212,40 @@ OpenAIChatSession >> submitPrompt: aPromptString role: aRoleString [
 { #category : 'adding' }
 OpenAIChatSession >> submitPrompt: aPromptString role: aRoleString outputStream: aStream [
 
-	| chat response assistantChat |
+	| chat functionCalls |
 	chat := OpenAISDKChat
-		        createWithRole: aRoleString
-		        content: aPromptString.
+		createWithRole: aRoleString
+		content: aPromptString.
 	self addChat: chat.
 
-	sdk createChatCompletionWithMessagesAsStream: chats
-		            model: model
-		            temperature: temperature
-						topP: topP 
-						presencePenalty: presencePenalty 
-						freqquencePenalty: frequencyPenalty 
-						onStream: aStream.
+	functionCalls := self functions
+		ifEmpty: [
+			sdk
+				createChatCompletionWithMessagesAsStream: chats
+				model: model
+				temperature: temperature
+				topP: topP
+				presencePenalty: presencePenalty
+				freqquencePenalty: frequencyPenalty
+				onStream: aStream.
+			#() ]
+		ifNotEmpty: [
+			sdk
+				createChatCompletionWithMessagesAsStream: chats
+				model: model
+				temperature: temperature
+				topP: topP
+				presencePenalty: presencePenalty
+				freqquencePenalty: frequencyPenalty
+				tools: self functions
+				onStream: aStream ].
 
-	"response := aStream contents.
-
-	assistantChat := response choices first message.
-	self addChat: assistantChat"
+	self handleFunctionCalls: functionCalls.
+	functionCalls ifNotEmpty: [
+		aStream ifNotNil: [
+			aStream nextPut: (OpenAISDKChat
+				createWithRole: 'assistant_stop'
+				content: '') ] ]
 ]
 
 { #category : 'adding' }
