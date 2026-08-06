@@ -249,6 +249,45 @@ OpenAIChatSession >> submitPrompt: aPromptString role: aRoleString outputStream:
 ]
 
 { #category : 'adding' }
+OpenAIChatSession >> submitPrompt: aPromptString roleResponses: aRoleString [
+
+	| chat response assistantChat |
+	chat := OpenAISDKChat
+		createWithRole: aRoleString
+		content: aPromptString.
+	self addChat: chat.
+
+	response := sdk
+		createResponseWithMessages: chats
+		model: model
+		temperature: temperature.
+
+	assistantChat := response firstAssistantChat.
+	assistantChat ifNotNil: [
+		self addChat: assistantChat ].
+	^ assistantChat
+]
+
+{ #category : 'adding' }
+OpenAIChatSession >> submitPrompt: aPromptString roleResponses: aRoleString outputStream: aStream [
+
+	| chat |
+	chat := OpenAISDKChat
+		        createWithRole: aRoleString
+		        content: aPromptString.
+	self addChat: chat.
+
+	sdk
+		createResponseWithMessagesAsStream: chats
+		model: model
+		temperature: temperature
+		topP: topP
+		presencePenalty: presencePenalty
+		frequencyPenalty: frequencyPenalty
+		onStream: aStream
+]
+
+{ #category : 'adding' }
 OpenAIChatSession >> submitPromptGpt5: aPromptString role: aRoleString [
 
 	| chat response assistantChat |
@@ -278,6 +317,18 @@ OpenAIChatSession >> submitSystemPrompt: aPromptString outputStream: aStream [
 ]
 
 { #category : 'adding' }
+OpenAIChatSession >> submitSystemPromptResponses: aPromptString [
+
+	^ self submitPrompt: aPromptString roleResponses: 'system'
+]
+
+{ #category : 'adding' }
+OpenAIChatSession >> submitSystemPromptResponses: aPromptString outputStream: aStream [
+
+	self submitPrompt: aPromptString roleResponses: 'system' outputStream: aStream
+]
+
+{ #category : 'adding' }
 OpenAIChatSession >> submitUserPrompt: aPromptString [
 
 	self submitPrompt: aPromptString role: 'user'
@@ -287,6 +338,21 @@ OpenAIChatSession >> submitUserPrompt: aPromptString [
 OpenAIChatSession >> submitUserPrompt: aPromptString outputStream: aStream [
 
 	self submitPrompt: aPromptString role: 'user' outputStream: aStream.
+]
+
+{ #category : 'adding' }
+OpenAIChatSession >> submitUserPromptResponses: aPromptString [
+
+	^ self submitPrompt: aPromptString roleResponses: 'user'
+]
+
+{ #category : 'adding' }
+OpenAIChatSession >> submitUserPromptResponses: aPromptString outputStream: aStream [
+
+	self
+		submitPrompt: aPromptString
+		roleResponses: 'user'
+		outputStream: aStream
 ]
 
 { #category : 'accessing' }
