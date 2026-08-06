@@ -260,7 +260,8 @@ OpenAISDK >> createChatCompletionGpt5WithMessages: aChatObjectsArray model: aMod
 	theClient := self client.
 	theClient 
 		entity: (ZnEntity with: json type: ZnMimeType applicationJson);
-		url: self baseURL , '/chat/completions'.
+		url: self baseURL , '/chat/completions';
+		timeout: 180.
 
 	response := theClient "logToTranscript; logLevel: 3;"  post.
 
